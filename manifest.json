@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Tello Line Dashboard",
-  "version": "1.0.1",
-  "description": "Scans Tello account phone lines and shows a combined dashboard.",
+  "version": "1.0.2",
+  "description": "Scans Tello account phone lines and syncs data to NAm.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://*.tello.com/*",
     "https://tello.com/*",
-    "https://tello.com/account/home"
+    "https://nam-qyn8.onrender.com/*"
   ],
   "content_scripts": [
     {
@@ -19,6 +19,13 @@
       "css": ["styles.css"],
       "run_at": "document_idle",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "https://nam-qyn8.onrender.com/*"
+      ],
+      "js": ["site-bridge.js"],
+      "run_at": "document_idle"
     }
   ]
 }
