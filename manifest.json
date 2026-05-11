@@ -1,18 +1,24 @@
 {
   "manifest_version": 3,
   "name": "Tello Line Dashboard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Scans Tello account phone lines and shows a combined dashboard.",
   "permissions": ["storage"],
+  "host_permissions": [
+    "https://*.tello.com/*",
+    "https://tello.com/*",
+    "https://tello.com/account/home"
+  ],
   "content_scripts": [
     {
       "matches": [
-        "https://tello.com/*",
-        "https://www.tello.com/*"
+        "https://*.tello.com/*",
+        "https://tello.com/*"
       ],
       "js": ["content.js"],
       "css": ["styles.css"],
-      "run_at": "document_end"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }
