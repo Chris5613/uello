@@ -2,7 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "tello_saved_accounts";
-  const ACTIVE_ACCOUNT_KEY = "tello_active_account_label";
+  const SCAN_STATE_KEY = "tello_scan_state";
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -14,157 +14,227 @@
       .trim();
   }
 
+  function findPhoneDropdown() {
+    return (
+      document.querySelector('select[name="selected_subscription_id"]') ||
+      document.querySelector("select.original-number") ||
+      document.querySelector("select.js_onchange_submit")
+    );
+  }
+
+  function getSelectedPhone(dropdown) {
+    const selected = dropdown?.selectedOptions?.[0];
+    return cleanText(selected?.textContent || "Unknown line");
+  }
+
+  function getDropdownOptions(dropdown) {
+    return [...dropdown.options]
+      .filter((option) => option.value)
+      .map((option, index) => ({
+        index,
+        value: option.value,
+        label: cleanText(option.textContent)
+      }));
+  }
+
   function getPageText() {
     return cleanText(document.body.innerText || document.body.textContent || "");
-  }
-
-  function findPhoneDropdown() {
-    const selects = [...document.querySelectorAll("select")];
-
-    return selects.find((select) => {
-      const optionText = [...select.options]
-        .map((option) => option.textContent)
-        .join(" ");
-
-      return /\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.test(optionText);
-    });
-  }
-
-  function extractPhoneFromOption(option) {
-    const text = cleanText(option?.textContent);
-    const match = text.match(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
-    return match ? match[0] : text || "Unknown line";
   }
 
   function extractLineData() {
     const text = getPageText();
 
-    const dataMatch =
-      text.match(/([\d.]+)\s*(MB|GB)\s*(?:remaining|left)/i) ||
-      text.match(/remaining\s*balance\s*([\d.]+)\s*(MB|GB)/i) ||
-      text.match(/([\d.]+)\s*(MB|GB)/i);
-
-    const totalMatch =
-      text.match(/\/\s*([\d.]+)\s*(MB|GB)/i) ||
-      text.match(/of\s*([\d.]+)\s*(MB|GB)/i);
+    const remainingMatch =
+      text.match(/([\d.]+)\s*(MB|GB)\s+remaining\s*\/\s*([\d.]+)\s*(MB|GB)/i) ||
+      text.match(/([\d.]+)\s*(MB|GB).*?remaining.*?\/\s*([\d.]+)\s*(MB|GB)/i);
 
     const renewalMatch =
-      text.match(/renewal\s*date[:\s]*([A-Za-z0-9,/\-\s]+)/i) ||
-      text.match(/renews?\s*(?:on)?\s*([A-Za-z0-9,/\-\s]+)/i);
-
-    const planMatch =
-      text.match(/(\d+(?:\.\d+)?\s*GB[^\\n]*?(?:Data|text|texts)[^\\n]*)/i) ||
-      text.match(/(Unlimited[^\\n]*?(?:text|texts|data)[^\\n]*)/i);
+      text.match(/Renewal date:\s*([0-9/]+)/i) ||
+      text.match(/automatically charged.*?([0-9/]+)/i);
 
     const priceMatch =
       text.match(/\$\s*\d+(?:\.\d{2})?/);
 
+    let dataRemaining = "Unknown";
+    let dataTotal = "Unknown";
+
+    if (remainingMatch) {
+      dataRemaining = `${remainingMatch[1]} ${remainingMatch[2]}`;
+      dataTotal = `${remainingMatch[3]} ${remainingMatch[4]}`;
+    } else {
+      const simpleDataMatch = text.match(/Remaining balance\s+([\d.]+)\s*(MB|GB)/i);
+      if (simpleDataMatch) {
+        dataRemaining = `${simpleDataMatch[1]} ${simpleDataMatch[2]}`;
+      }
+
+      const totalMatch = text.match(/\/\s*([\d.]+)\s*(MB|GB)/i);
+      if (totalMatch) {
+        dataTotal = `${totalMatch[1]} ${totalMatch[2]}`;
+      }
+    }
+
+    const planMatch =
+      text.match(/My Plan\s+([\d.]+\s*GB).*?(Unlimited text|Unlimited texts)/i) ||
+      text.match(/([\d.]+\s*GB).*?(Unlimited text|Unlimited texts)/i);
+
     return {
-      dataRemaining: dataMatch ? `${dataMatch[1]} ${dataMatch[2]}` : "Unknown",
-      dataTotal: totalMatch ? `${totalMatch[1]} ${totalMatch[2]}` : "Unknown",
-      renewalDate: renewalMatch ? cleanText(renewalMatch[1]).slice(0, 40) : "Unknown",
-      plan: planMatch ? cleanText(planMatch[1]).slice(0, 80) : "Unknown",
+      dataRemaining,
+      dataTotal,
+      texts: /Unlimited texts?/i.test(text) ? "Unlimited texts" : "Unknown",
+      renewalDate: renewalMatch ? renewalMatch[1] : "Unknown",
+      plan: planMatch ? `${cleanText(planMatch[1])} Data + ${cleanText(planMatch[2])}` : "Unknown",
       price: priceMatch ? priceMatch[0] : "Unknown",
-      texts: /unlimited\s*texts?/i.test(text) ? "Unlimited texts" : "Unknown"
+      lastScanned: new Date().toISOString()
     };
   }
 
-  function getAccountLabel() {
-    return (
-      localStorage.getItem(ACTIVE_ACCOUNT_KEY) ||
-      document.querySelector("#tello-account-label-input")?.value ||
-      "Tello Account"
-    );
-  }
-
-  function setAccountLabel(label) {
-    localStorage.setItem(ACTIVE_ACCOUNT_KEY, label || "Tello Account");
-  }
-
-  async function getSavedAccounts() {
+  async function chromeGet(key, fallback) {
     return new Promise((resolve) => {
-      chrome.storage.local.get([STORAGE_KEY], (result) => {
-        resolve(result[STORAGE_KEY] || []);
+      chrome.storage.local.get([key], (result) => {
+        resolve(result[key] ?? fallback);
       });
     });
   }
 
-  async function saveAccounts(accounts) {
+  async function chromeSet(data) {
     return new Promise((resolve) => {
-      chrome.storage.local.set({ [STORAGE_KEY]: accounts }, resolve);
+      chrome.storage.local.set(data, resolve);
     });
   }
 
-  async function saveScannedAccount(account) {
-    const accounts = await getSavedAccounts();
-    const existingIndex = accounts.findIndex((item) => item.accountId === account.accountId);
+  async function saveLineToAccount(accountLabel, phone, lineData) {
+    const accounts = await chromeGet(STORAGE_KEY, []);
+    const accountId = accountLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_");
 
-    if (existingIndex >= 0) {
-      accounts[existingIndex] = account;
-    } else {
+    let account = accounts.find((item) => item.accountId === accountId);
+
+    if (!account) {
+      account = {
+        accountId,
+        label: accountLabel,
+        lines: [],
+        lineCount: 0,
+        lastScanned: new Date().toISOString()
+      };
       accounts.push(account);
     }
 
-    await saveAccounts(accounts);
+    const existingIndex = account.lines.findIndex((line) => line.phone === phone);
+
+    const savedLine = {
+      phone,
+      ...lineData
+    };
+
+    if (existingIndex >= 0) {
+      account.lines[existingIndex] = savedLine;
+    } else {
+      account.lines.push(savedLine);
+    }
+
+    account.lineCount = account.lines.length;
+    account.lastScanned = new Date().toISOString();
+
+    await chromeSet({ [STORAGE_KEY]: accounts });
   }
 
-  function makeAccountId(label) {
-    return cleanText(label).toLowerCase().replace(/[^a-z0-9]+/g, "_") || "tello_account";
-  }
-
-  async function scanCurrentAccount() {
+  async function startScan() {
     const dropdown = findPhoneDropdown();
 
     if (!dropdown) {
-      alert("Could not find the phone number dropdown on this page.");
+      alert("Could not find the Tello number dropdown.");
       return;
     }
 
     const accountLabel =
-      prompt("Name this Tello account:", getAccountLabel()) || getAccountLabel();
+      prompt("Name this Tello account:", "Tello Account") || "Tello Account";
 
-    setAccountLabel(accountLabel);
+    const options = getDropdownOptions(dropdown);
 
-    const options = [...dropdown.options].filter((option) => option.value !== "");
-    const lines = [];
-
-    for (const option of options) {
-      dropdown.value = option.value;
-
-      dropdown.dispatchEvent(new Event("input", { bubbles: true }));
-      dropdown.dispatchEvent(new Event("change", { bubbles: true }));
-
-      await sleep(2500);
-
-      const phone = extractPhoneFromOption(option);
-      const lineData = extractLineData();
-
-      lines.push({
-        phone,
-        ...lineData,
-        lastScanned: new Date().toISOString()
-      });
+    if (!options.length) {
+      alert("No phone numbers found in the dropdown.");
+      return;
     }
 
-    const account = {
-      accountId: makeAccountId(accountLabel),
-      label: accountLabel,
-      lineCount: lines.length,
-      lines,
-      lastScanned: new Date().toISOString()
-    };
+    await chromeSet({
+      [SCAN_STATE_KEY]: {
+        active: true,
+        accountLabel,
+        options,
+        currentIndex: 0
+      }
+    });
 
-    await saveScannedAccount(account);
-    renderDashboard();
+    alert("Scan started. The page may reload as it switches numbers.");
 
-    alert(`Scanned ${lines.length} line(s) for ${accountLabel}.`);
+    await continueScan();
+  }
+
+  async function continueScan() {
+    const state = await chromeGet(SCAN_STATE_KEY, null);
+    if (!state || !state.active) return;
+
+    const dropdown = findPhoneDropdown();
+    if (!dropdown) return;
+
+    await sleep(1600);
+
+    const selectedValue = dropdown.value;
+    const selectedPhone = getSelectedPhone(dropdown);
+    const lineData = extractLineData();
+
+    await saveLineToAccount(state.accountLabel, selectedPhone, lineData);
+
+    const currentOptionIndex = state.options.findIndex(
+      (option) => option.value === selectedValue
+    );
+
+    const nextIndex =
+      currentOptionIndex >= 0 ? currentOptionIndex + 1 : state.currentIndex + 1;
+
+    if (nextIndex >= state.options.length) {
+      await chromeSet({
+        [SCAN_STATE_KEY]: {
+          active: false,
+          accountLabel: state.accountLabel,
+          options: state.options,
+          currentIndex: nextIndex
+        }
+      });
+
+      renderDashboard();
+      alert(`Finished scanning ${state.accountLabel}.`);
+      return;
+    }
+
+    const nextOption = state.options[nextIndex];
+
+    await chromeSet({
+      [SCAN_STATE_KEY]: {
+        ...state,
+        currentIndex: nextIndex
+      }
+    });
+
+    dropdown.value = nextOption.value;
+
+    dropdown.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const form = dropdown.closest("form");
+    if (form) {
+      form.submit();
+    }
   }
 
   async function clearSavedData() {
     const confirmed = confirm("Clear all saved Tello account data?");
     if (!confirmed) return;
 
-    await saveAccounts([]);
+    await chromeSet({
+      [STORAGE_KEY]: [],
+      [SCAN_STATE_KEY]: null
+    });
+
     renderDashboard();
   }
 
@@ -199,20 +269,20 @@
         </div>
 
         <div class="tello-dash-actions">
-          <button id="tello-scan-account-btn">Scan this account</button>
-          <button id="tello-clear-data-btn">Clear</button>
-          <button id="tello-minimize-btn">−</button>
+          <button id="tello-scan-account-btn" type="button">Scan this account</button>
+          <button id="tello-clear-data-btn" type="button">Clear</button>
+          <button id="tello-minimize-btn" type="button">−</button>
         </div>
       </div>
 
       <div id="tello-dashboard-body"></div>
     `;
 
-    document.body.appendChild(shell);
+    document.documentElement.appendChild(shell);
 
     document
       .getElementById("tello-scan-account-btn")
-      .addEventListener("click", scanCurrentAccount);
+      .addEventListener("click", startScan);
 
     document
       .getElementById("tello-clear-data-btn")
@@ -229,12 +299,12 @@
     createShell();
 
     const body = document.getElementById("tello-dashboard-body");
-    const accounts = await getSavedAccounts();
+    const accounts = await chromeGet(STORAGE_KEY, []);
 
     if (!accounts.length) {
       body.innerHTML = `
         <div class="tello-empty">
-          No saved lines yet. Log into a Tello account, then click <b>Scan this account</b>.
+          No saved lines yet. Click <b>Scan this account</b>.
         </div>
       `;
       return;
@@ -290,9 +360,13 @@
       .join("");
   }
 
-  function init() {
+  async function init() {
     createShell();
-    renderDashboard();
+    await renderDashboard();
+
+    setTimeout(() => {
+      continueScan();
+    }, 1200);
   }
 
   if (document.readyState === "loading") {
