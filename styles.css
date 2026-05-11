@@ -1,0 +1,236 @@
+#tello-line-dashboard {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 430px;
+  max-width: calc(100vw - 24px);
+  max-height: 82vh;
+  z-index: 2147483647;
+  overflow: hidden;
+
+  background: #11161c;
+  color: #edf4ff;
+  border: 1px solid rgba(70, 150, 255, 0.28);
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.tello-dash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  padding: 14px;
+  background: linear-gradient(180deg, #17202a, #10151b);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tello-dash-title {
+  font-size: 15px;
+  font-weight: 900;
+  color: #54b7ff;
+}
+
+.tello-dash-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(237, 244, 255, 0.62);
+}
+
+.tello-dash-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.tello-dash-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0e75bd;
+  color: white;
+  border-radius: 9px;
+  padding: 7px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tello-dash-actions button:hover {
+  filter: brightness(1.1);
+}
+
+#tello-clear-data-btn,
+#tello-minimize-btn {
+  background: #252d37;
+}
+
+#tello-dashboard-body {
+  padding: 12px;
+  overflow-y: auto;
+  max-height: calc(82vh - 64px);
+}
+
+.tello-empty {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(237, 244, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tello-account-section {
+  margin-bottom: 14px;
+}
+
+.tello-account-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 8px;
+  color: #54b7ff;
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.tello-account-title small {
+  color: rgba(237, 244, 255, 0.56);
+  font-weight: 700;
+}
+
+.tello-line-card {
+  padding: 12px;
+  margin-bottom: 10px;
+
+  background: #171e26;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+.tello-line-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tello-phone {
+  font-size: 15px;
+  font-weight: 900;
+  color: white;
+}
+
+.tello-plan {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(237, 244, 255, 0.62);
+}
+
+.tello-price {
+  color: #8fe36d;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.tello-data-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+
+  margin-top: 14px;
+}
+
+.tello-data-main {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.tello-data-sub {
+  margin-top: 3px;
+  font-size: 11px;
+  color: rgba(237, 244, 255, 0.56);
+}
+
+.tello-texts {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(84, 183, 255, 0.12);
+  color: #8ed0ff;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tello-progress {
+  height: 10px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tello-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4dce6d, #9adf63);
+}
+
+.tello-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+
+  margin-top: 9px;
+  color: rgba(237, 244, 255, 0.45);
+  font-size: 10px;
+}
+
+.tello-minimized {
+  width: 310px;
+}
+
+.tello-minimized #tello-dashboard-body {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  #tello-line-dashboard {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    max-width: none;
+    max-height: 78vh;
+    border-radius: 16px;
+  }
+
+  .tello-dash-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tello-dash-actions {
+    width: 100%;
+  }
+
+  .tello-dash-actions button {
+    flex: 1;
+  }
+
+  .tello-line-top,
+  .tello-data-row,
+  .tello-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tello-data-main {
+    font-size: 22px;
+  }
+}
